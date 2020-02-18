@@ -167,7 +167,8 @@ def loadModel():
 
     # Normalize pixel values to be between 0 and 1
     train_images, test_images = train_images / 255.0, test_images / 255.0
-
+    print(type(train_images))
+    exit(0)
     # Re-evaluate the model
     loss, acc = model.evaluate(test_images, test_labels, verbose=2)
     print("Restored model, accuracy: {:5.2f}%".format(100 * acc))

@@ -1,10 +1,11 @@
 import tensorflow as tf
 import random
+import numpy as np
 
 class DataLoader(object):
     """A TensorFlow Dataset API based loader for semantic segmentation problems."""
 
-    def __init__(self, image_paths, mask_paths, image_size, channels=[3, 3], crop_percent=None, palette=None, seed=None):
+    def __init__(self, image_paths, mask_paths, label_paths, image_size, channels=[3, 3], crop_percent=None, palette=None, seed=None, lidar=None):
         """
         Initializes the data loader object
         Args:
@@ -26,6 +27,7 @@ class DataLoader(object):
         self.mask_paths = mask_paths
         self.palette = palette
         self.image_size = image_size
+        self.label_paths = label_paths
         if crop_percent is not None:
             if 0.0 < crop_percent <= 1.0:
                 self.crop_percent = tf.constant(crop_percent, tf.float32)
@@ -41,6 +43,11 @@ class DataLoader(object):
             self.seed = random.randint(0, 1000)
         else:
             self.seed = seed
+
+        if lidar is None:
+            self.lidar = False
+        else:
+            self.lidar = True
 
 
 
@@ -108,29 +115,50 @@ class DataLoader(object):
         return image, mask
 
 
-    def _resize_data(self, image, mask):
+    def _resize_data(self, image, mask, lidar):
         """
         Resizes images to specified size.
         """
         image = tf.image.resize(image, [self.image_size[0], self.image_size[1]])
         mask = tf.image.resize(mask, [self.image_size[0], self.image_size[1]], method='nearest')
-        
+
+        if lidar != None:
+            lidar = tf.image.resize(lidar, [self.image_size[0], self.image_size[1]], method='nearest')
+            return image, mask, lidar
+
         return image, mask
 
 
-    def _parse_data(self, image_paths, mask_paths):
+    def _parse_data(self, image_paths, mask_paths, label_paths):
         """
         Reads image and mask files depending on
         specified exxtension.
         """
         image_content = tf.io.read_file(image_paths)
         mask_content = tf.io.read_file(mask_paths)
-
+        print(image_content)
         images = tf.image.decode_jpeg(image_content, channels=self.channels[0])
         masks = tf.image.decode_jpeg(mask_content, channels=self.channels[1])
 
+
         images = tf.cast(images, tf.float32) / 255.0
         masks = tf.cast(masks, tf.float32) / 255.0
+        print(images)
+        if self.lidar == True:
+
+            lidar_content = tf.io.read_file(label_paths)
+            print(lidar_content)
+            # lidar = tf.io.decode_raw(lidar_content, out_type = tf.float64)
+            lidar = tf.image.decode_jpeg(lidar_content, channels=self.channels[1])
+            lidar = tf.cast(lidar, tf.float32) / 255.0
+            # for label_path in self.label_paths:
+            #     labels = np.load(label_path, allow_pickle=True)
+            #     lidar_content.append(labels)
+
+            print(lidar)
+            #lidar = tf.cast(lidar, tf.int16)
+            print(lidar)
+            return images, masks, lidar
 
         return images, masks
 
@@ -163,8 +191,13 @@ class DataLoader(object):
             data: A tf dataset object.
         """
 
-        # Create dataset out of the 2 files:
-        data = tf.data.Dataset.from_tensor_slices((self.image_paths, self.mask_paths))
+        if self.lidar:
+            # Create dataset out of the 3 files:
+            data = tf.data.Dataset.from_tensor_slices((self.image_paths, self.mask_paths, self.label_paths))
+
+        else:
+            # Create dataset out of the 2 files:
+            data = tf.data.Dataset.from_tensor_slices((self.image_paths, self.mask_paths))
 
         # Parse images and labels
         data = data.map(self._parse_data, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -189,9 +222,6 @@ class DataLoader(object):
 
             data = data.map(self._flip_left_right,
                             num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
-
 
 
         # One hot encode the mask

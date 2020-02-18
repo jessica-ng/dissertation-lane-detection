@@ -23,11 +23,11 @@ from dataloader import DataLoader
 import numpy as np
 
 import cv2
-
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
 def import_data():
-    IMAGE_DIR_PATH = '/home/jessica/Downloads/training/image_2'
-    MASK_DIR_PATH = '/home/jessica/Downloads/training/semantic_rgb'
+    IMAGE_DIR_PATH = '/home/jessica/Downloads/currentData/training/image_2'
+    MASK_DIR_PATH = '/home/jessica/Downloads/currentData/training/semantic_rgb'
 
     # create list of PATHS
     image_paths = [os.path.join(IMAGE_DIR_PATH, x) for x in os.listdir(IMAGE_DIR_PATH) if x.endswith('.png')]
@@ -72,8 +72,8 @@ def import_test_data():
                          seed=47)
 
     dataset = dataset.data_batch(batch_size=100,
-                                 augment=True,
-                                 shuffle=True)
+                                 augment=False,
+                                 shuffle=False)
 
     test_images = []
     test_mask = []
@@ -254,7 +254,7 @@ def create_model():
     model = unet_model(OUTPUT_CHANNELS)
 
 
-    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.compile(optimizer='adam', metrics=['accuracy'], loss='mean_squared_error')
 
     tf.keras.utils.plot_model(model, show_shapes=True)
     #model.summary()
@@ -273,9 +273,14 @@ def load_model():
     # Load the previously saved weights
     model.load_weights('training_lanes_fcn_1/weights.h5')
 
+    test_images, test_labels = import_test_data()
+
+    test_images = test_images[0].numpy() * 255
+    test_labels = test_labels[0].numpy()
     # # Re-evaluate the model
-    # loss, acc = model.evaluate(test_images, test_labels, verbose=2)
-    # print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
+    loss, acc = model.evaluate(test_images, test_labels, verbose=2)
+    print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
+
 
     return model
 
@@ -285,6 +290,7 @@ def create_mask(pred_mask):
     # pred_mask = tf.argmax(pred_mask, axis=-1)
     # pred_mask = pred_mask[..., tf.newaxis]
     #print(pred_mask)
+    print(pred_mask)
     return pred_mask[0]
 
 def show_predictions( model, dataset=None, num=1):
@@ -330,6 +336,7 @@ def train(model):
     VAL_SUBSPLITS = 5
     BATCH_SIZE = 200
     VALIDATION_STEPS = 100 // BATCH_SIZE // VAL_SUBSPLITS
+    print(len(test_dataset[0][0]))
 
     model_history = model.fit(train_dataset[0][0]*255, train_dataset[1][0], epochs=EPOCHS,
                               #batch_size=BATCH_SIZE,
@@ -351,9 +358,10 @@ def train(model):
 
 def main():
     #model = create_model()
-    #model = load_model()
-    model = keras.models.load_model('training_lanes_fcn_1/fcn.h5')
-    train(model)
+    model = load_model()
+    #model = keras.models.load_model('training_lanes_fcn_1/fcn.h5')
+    #train(model)
+    #show_predictions(model)
 
 if __name__ == "__main__":
     main()
