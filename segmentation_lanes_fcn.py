@@ -18,16 +18,19 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras import regularizers
 from keras.optimizers import Adam
 
-from dataloader import DataLoader
+from old_dataloader import DataLoader
 
 import numpy as np
 
 import cv2
-os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+# os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
 def import_data():
-    IMAGE_DIR_PATH = '/home/jessica/Downloads/currentData/training/image_2'
-    MASK_DIR_PATH = '/home/jessica/Downloads/currentData/training/semantic_rgb'
+    # IMAGE_DIR_PATH = '/home/jessica/Downloads/currentData/training/image_2'
+    # MASK_DIR_PATH = '/home/jessica/Downloads/currentData/training/semantic_rgb'
+
+    IMAGE_DIR_PATH = '/media/jessica/FE20FA1220F9D21F/Uni/Dissertation/datasets/a2d2/training/images'
+    MASK_DIR_PATH = '/media/jessica/FE20FA1220F9D21F/Uni/Dissertation/datasets/a2d2/training/mask'
 
     # create list of PATHS
     image_paths = [os.path.join(IMAGE_DIR_PATH, x) for x in os.listdir(IMAGE_DIR_PATH) if x.endswith('.png')]
@@ -38,11 +41,12 @@ def import_data():
                          image_size=[128, 128],
                          crop_percent=None,
                          channels=[3, 3],
-                         seed=47)
+                         seed=47,
+                         testing=False)
 
 
 
-    dataset = dataset.data_batch(batch_size=100,
+    dataset = dataset.data_batch(batch_size=1000,
                                  augment = True,
                                  shuffle = True)
 
@@ -57,8 +61,10 @@ def import_data():
     return [train_images, train_mask]
 
 def import_test_data():
-    IMAGE_DIR_PATH = '/home/jessica/Downloads/testing/image'
-    MASK_DIR_PATH = '/home/jessica/Downloads/testing/mask'
+    # IMAGE_DIR_PATH = '/home/jessica/Downloads/testing/image'
+    # MASK_DIR_PATH = '/home/jessica/Downloads/testing/mask'
+    IMAGE_DIR_PATH = '/media/jessica/FE20FA1220F9D21F/Uni/Dissertation/datasets/a2d2/testing/images'
+    MASK_DIR_PATH = '/media/jessica/FE20FA1220F9D21F/Uni/Dissertation/datasets/a2d2/testing/mask'
 
     # create list of PATHS
     image_paths = [os.path.join(IMAGE_DIR_PATH, x) for x in os.listdir(IMAGE_DIR_PATH) if x.endswith('.png')]
@@ -69,7 +75,8 @@ def import_test_data():
                          image_size=[128, 128],
                          crop_percent=None,
                          channels=[3, 3],
-                         seed=47)
+                         seed=47,
+                         testing=True)
 
     dataset = dataset.data_batch(batch_size=100,
                                  augment=False,
@@ -98,9 +105,9 @@ def get_train():
 
     # train = dataset['train'].map(train_dataset, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     # test = dataset['test'].map(test_dataset)
-
-    train_dataset = import_data()
     test_dataset = import_test_data()
+    train_dataset = import_data()
+
 
     # train_dataset = train.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
     # train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
@@ -271,11 +278,11 @@ def load_model():
     model = create_model()
 
     # Load the previously saved weights
-    model.load_weights('training_lanes_fcn_1/weights.h5')
+    model.load_weights('training_lanes_fcn_large_data_1/weights.h5')
 
     test_images, test_labels = import_test_data()
 
-    test_images = test_images[0].numpy() * 255
+    test_images = test_images[0].numpy()
     test_labels = test_labels[0].numpy()
     # # Re-evaluate the model
     loss, acc = model.evaluate(test_images, test_labels, verbose=2)
@@ -317,7 +324,7 @@ def train(model):
 
     train_dataset, test_dataset, STEPS_PER_EPOCH = get_train()
 
-    test_image, test_mask = show_example()
+    # test_image, test_mask = show_example()
 
     # loss, acc = model.evaluate(test_dataset)
     # print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
@@ -338,18 +345,18 @@ def train(model):
     VALIDATION_STEPS = 100 // BATCH_SIZE // VAL_SUBSPLITS
     print(len(test_dataset[0][0]))
 
-    model_history = model.fit(train_dataset[0][0]*255, train_dataset[1][0], epochs=EPOCHS,
+    model_history = model.fit(train_dataset[0][0], train_dataset[1][0], epochs=EPOCHS,
                               #batch_size=BATCH_SIZE,
                               steps_per_epoch=100,
                               validation_steps=100,
-                              validation_data=(test_dataset[0][0]*255, test_dataset[1][0]))
+                              validation_data=(test_dataset[0][0], test_dataset[1][0]))
                               #callbacks=[cp_callback])
 
     # model.fit_generator((train_dataset[0][0], train_dataset[1][0]),
     #                     #steps_per_epoch=STEPS_PER_EPOCH,
     #                     epochs=EPOCHS, verbose=0, validation_data=(test_dataset[0][0], test_dataset[1][0]))
-    model.save_weights('training_lanes_fcn_1/weights.h5')
-    model.save('training_lanes_fcn_1/fcn.h5')
+    model.save_weights('training_lanes_fcn_large_data_1/weights.h5')
+    model.save('training_lanes_fcn_large_data_1/fcn.h5')
 
     model.summary()
     show_predictions(model)
@@ -357,11 +364,11 @@ def train(model):
 
 
 def main():
-    #model = create_model()
+    # model = create_model()
     model = load_model()
     #model = keras.models.load_model('training_lanes_fcn_1/fcn.h5')
-    #train(model)
-    #show_predictions(model)
+    train(model)
+    show_predictions(model)
 
 if __name__ == "__main__":
     main()

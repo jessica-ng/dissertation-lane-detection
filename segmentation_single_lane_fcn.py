@@ -57,11 +57,11 @@ def import_data():
     for image, mask in dataset.take(1):
         train_images = image
         train_mask = mask
-        print(mask.shape)
-        train_labels = labels.getLabels(mask)
-    print(len(train_images))
-    print(len(train_mask))
-    exit()
+    #     print(mask.shape)
+    #     train_labels = labels.getLabels(mask)
+    # print(len(train_images))
+    # print(len(train_mask))
+    # exit()
     # print((train_images, train_mask))
     return [train_images, train_mask, train_labels]
 
@@ -367,10 +367,10 @@ def train(model):
 
 
 def main():
-    model = create_model()
-    #model = load_model()
+    # model = create_model()
+    model = load_model()
     #model = keras.models.load_model('training_lanes_fcn_1/fcn.h5')
-    train(model)
+    #train(model)
     show_predictions(model)
 
 if __name__ == "__main__":

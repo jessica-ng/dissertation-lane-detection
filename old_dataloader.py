@@ -1,11 +1,12 @@
 import tensorflow as tf
 import random
-import numpy as np
+
 
 class DataLoader(object):
     """A TensorFlow Dataset API based loader for semantic segmentation problems."""
 
-    def __init__(self, image_paths, mask_paths, label_paths, image_size, channels=[3, 3], crop_percent=None, palette=None, seed=None, lidar=None):
+    def __init__(self, image_paths, mask_paths, image_size, channels=[3, 3], crop_percent=None, palette=None, seed=None,
+                 testing=None):
         """
         Initializes the data loader object
         Args:
@@ -23,11 +24,25 @@ class DataLoader(object):
             seed: An int, if not specified, chosen randomly. Used as the seed for 
                   the RNG in the data pipeline.
         """
+        image_paths.sort()
+        mask_paths.sort()
         self.image_paths = image_paths
         self.mask_paths = mask_paths
+
+        if not testing:
+            dictionary = dict(zip(image_paths, mask_paths))
+            dict_list = list(dictionary.items())
+            random.shuffle(dict_list)
+            new_dictionary = dict(dict_list)
+
+            self.image_paths = list(new_dictionary.keys())[0:1000]
+            self.mask_paths = list(new_dictionary.values())[0:1000]
+        elif testing == True:
+            self.image_paths = image_paths[0:500]
+            self.mask_paths = mask_paths[0:500]
+
         self.palette = palette
         self.image_size = image_size
-        self.label_paths = label_paths
         if crop_percent is not None:
             if 0.0 < crop_percent <= 1.0:
                 self.crop_percent = tf.constant(crop_percent, tf.float32)
@@ -44,14 +59,7 @@ class DataLoader(object):
         else:
             self.seed = seed
 
-        if lidar is None:
-            self.lidar = False
-        else:
-            self.lidar = True
-
-
-
-    def _corrupt_brightness(self, image, mask, lidar):
+    def _corrupt_brightness(self, image, mask):
         """
         Radnomly applies a random brightness change.
         """
@@ -59,10 +67,9 @@ class DataLoader(object):
             [], maxval=2, dtype=tf.int32), tf.bool)
         image = tf.cond(cond_brightness, lambda: tf.image.random_brightness(
             image, 0.1), lambda: tf.identity(image))
-        return image, mask, lidar
+        return image, mask
 
-
-    def _corrupt_contrast(self, image, mask, lidar):
+    def _corrupt_contrast(self, image, mask):
         """
         Randomly applies a random contrast change.
         """
@@ -70,10 +77,9 @@ class DataLoader(object):
             [], maxval=2, dtype=tf.int32), tf.bool)
         image = tf.cond(cond_contrast, lambda: tf.image.random_contrast(
             image, 0.1, 0.8), lambda: tf.identity(image))
-        return image, mask, lidar
+        return image, mask
 
-
-    def _corrupt_saturation(self, image, mask, lidar):
+    def _corrupt_saturation(self, image, mask):
         """
         Randomly applies a random saturation change.
         """
@@ -81,10 +87,9 @@ class DataLoader(object):
             [], maxval=2, dtype=tf.int32), tf.bool)
         image = tf.cond(cond_saturation, lambda: tf.image.random_saturation(
             image, 0.1, 0.8), lambda: tf.identity(image))
-        return image, mask, lidar
+        return image, mask
 
-
-    def _crop_random(self, image, mask, lidar):
+    def _crop_random(self, image, mask):
         """
         Randomly crops image and mask in accord.
         """
@@ -102,66 +107,46 @@ class DataLoader(object):
         mask = tf.cond(cond_crop_mask, lambda: tf.image.random_crop(
             mask, [h, w, self.channels[1]], seed=self.seed), lambda: tf.identity(mask))
 
-        return image, mask, lidar
+        return image, mask
 
-
-    def _flip_left_right(self, image, mask, lidar):
+    def _flip_left_right(self, image, mask):
         """
         Randomly flips image and mask left or right in accord.
         """
         image = tf.image.random_flip_left_right(image, seed=self.seed)
         mask = tf.image.random_flip_left_right(mask, seed=self.seed)
 
-        return image, mask, lidar
+        return image, mask
 
-
-    def _resize_data(self, image, mask, lidar):
+    def _resize_data(self, image, mask):
         """
         Resizes images to specified size.
         """
         image = tf.image.resize(image, [self.image_size[0], self.image_size[1]])
         mask = tf.image.resize(mask, [self.image_size[0], self.image_size[1]], method='nearest')
 
-        if lidar is not None:
-            lidar = tf.image.resize(lidar, [self.image_size[0], self.image_size[1]], method='nearest')
-            return image, mask, lidar
-
         return image, mask
 
-
-    def _parse_data(self, image_paths, mask_paths, label_paths):
+    def _parse_data(self, image_paths, mask_paths):
         """
         Reads image and mask files depending on
-        specified exxtension.
+        specified extension.
         """
+
+        # dictionary = dict(zip(image_paths, mask_paths))
+        #
+        # print(list(dictionary.items()))
+
         image_content = tf.io.read_file(image_paths)
         mask_content = tf.io.read_file(mask_paths)
-        print(image_content)
+
         images = tf.image.decode_jpeg(image_content, channels=self.channels[0])
         masks = tf.image.decode_jpeg(mask_content, channels=self.channels[1])
 
-
         images = tf.cast(images, tf.float32) / 255.0
         masks = tf.cast(masks, tf.float32) / 255.0
-        print(images)
-        if self.lidar == True:
-
-            lidar_content = tf.io.read_file(label_paths)
-            print(lidar_content)
-            # lidar = tf.io.decode_raw(lidar_content, out_type = tf.float64)
-            lidar = tf.image.decode_jpeg(lidar_content, channels=self.channels[1])
-            lidar = tf.cast(lidar, tf.float32) / 255.0
-            # for label_path in self.label_paths:
-            #     labels = np.load(label_path, allow_pickle=True)
-            #     lidar_content.append(labels)
-
-            print(lidar)
-            #lidar = tf.cast(lidar, tf.int16)
-            print(lidar)
-            return images, masks, lidar
 
         return images, masks
-
 
     def _one_hot_encode(self, image, mask):
         """
@@ -173,7 +158,7 @@ class DataLoader(object):
             one_hot_map.append(class_map)
         one_hot_map = tf.stack(one_hot_map, axis=-1)
         one_hot_map = tf.cast(one_hot_map, tf.float32)
-        
+
         return image, one_hot_map
 
     def data_batch(self, batch_size, augment, shuffle=False, one_hot_encode=False):
@@ -190,14 +175,8 @@ class DataLoader(object):
         Returns:
             data: A tf dataset object.
         """
-
-        if self.lidar:
-            # Create dataset out of the 3 files:
-            data = tf.data.Dataset.from_tensor_slices((self.image_paths, self.mask_paths, self.label_paths))
-
-        else:
-            # Create dataset out of the 2 files:
-            data = tf.data.Dataset.from_tensor_slices((self.image_paths, self.mask_paths))
+        # Create dataset out of the 2 files:
+        data = tf.data.Dataset.from_tensor_slices((self.image_paths, self.mask_paths))
 
         # Parse images and labels
         data = data.map(self._parse_data, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -217,12 +196,11 @@ class DataLoader(object):
                             num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
             if self.crop_percent is not None:
-                data = data.map(self._crop_random, 
+                data = data.map(self._crop_random,
                                 num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
             data = data.map(self._flip_left_right,
                             num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
 
         # One hot encode the mask
         if one_hot_encode:
@@ -233,10 +211,10 @@ class DataLoader(object):
 
         if shuffle:
             # Prefetch, shuffle then batch
-            data = data.prefetch(tf.data.experimental.AUTOTUNE).shuffle(random.randint(0, len(self.image_paths))).batch(batch_size)
+            data = data.prefetch(tf.data.experimental.AUTOTUNE).shuffle(random.randint(0, len(self.image_paths))).batch(
+                batch_size)
         else:
             # Batch and prefetch
             data = data.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
-
 
         return data
